@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini Chat Assistant</title>
+    <!-- 保留 Tailwind CDN，虽然生产环境不推荐，但为了样式不崩先留着 -->
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
-      // Standard configuration for Tailwind Play CDN
       tailwind.config = {
         darkMode: 'class',
         theme: {
@@ -27,7 +27,6 @@
       :root {
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
       }
-      
       /* Custom scrollbar */
       ::-webkit-scrollbar {
         width: 6px;
@@ -37,31 +36,24 @@
         background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #cbd5e1; /* Slate-300 */
+        background: #cbd5e1; 
         border-radius: 3px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8; /* Slate-400 */
+        background: #94a3b8; 
       }
       .dark ::-webkit-scrollbar-thumb {
-        background: #3f3f46; /* Zinc-700 */
+        background: #3f3f46; 
       }
       .dark ::-webkit-scrollbar-thumb:hover {
-        background: #52525b; /* Zinc-600 */
+        background: #52525b; 
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/"
-  }
-}
-</script>
+    <!-- 删除了 importmap -->
+    <!-- 删除了可能不存在的 index.css 引用，通常 css 会在 index.tsx 里引入 -->
 </head>
   <body class="bg-white text-slate-900 dark:bg-[#09090b] dark:text-zinc-100 transition-colors duration-200 selection:bg-indigo-100 dark:selection:bg-indigo-500/30">
     <div id="root"></div>
-  </body>
+    <script type="module" src="/index.tsx"></script>
+</body>
 </html>
