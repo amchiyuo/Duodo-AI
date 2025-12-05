@@ -1,0 +1,5 @@
+{
+  "name": "Duodo AI",
+  "description": "A flexible chat interface for Gemini models allowing dynamic model selection.",
+  "requestFramePermissions": []
+}
