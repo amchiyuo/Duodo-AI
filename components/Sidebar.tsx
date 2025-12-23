@@ -10,7 +10,8 @@ import {
   ZenavaSmallLogo, 
   SunIcon, 
   MoonIcon,
-  PanelLeftIcon
+  PanelLeftIcon,
+  SnowflakeIcon
 } from './Icons';
 
 interface SidebarProps {
@@ -26,6 +27,8 @@ interface SidebarProps {
   onCloseMobile: () => void;
   isDarkMode: boolean;
   onToggleTheme: () => void;
+  isSnowing: boolean;
+  onToggleSnow: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -40,7 +43,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   setIsCollapsed,
   onCloseMobile,
   isDarkMode,
-  onToggleTheme
+  onToggleTheme,
+  isSnowing,
+  onToggleSnow
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -155,9 +160,14 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950/50">
-           <button onClick={onToggleTheme} className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
-             {isDarkMode ? <SunIcon className="w-4 h-4" /> : <MoonIcon className="w-4 h-4" />}
-           </button>
+           <div className="flex items-center gap-1">
+             <button onClick={onToggleTheme} className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors" title="切换主题">
+               {isDarkMode ? <SunIcon className="w-4 h-4" /> : <MoonIcon className="w-4 h-4" />}
+             </button>
+             <button onClick={onToggleSnow} className={`p-2 rounded-lg transition-colors ${isSnowing ? 'text-indigo-500 bg-indigo-500/10' : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800'}`} title="Let it Snow">
+               <SnowflakeIcon className="w-4 h-4" />
+             </button>
+           </div>
            <div className="flex flex-col items-end">
              <span className="text-[10px] text-zinc-400 font-mono">ZENAVA V1.2</span>
            </div>

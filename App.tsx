@@ -7,6 +7,7 @@ import ChatMessage from './components/ChatMessage';
 import ModelSelector from './components/ModelSelector';
 import ModelManagerModal from './components/ModelManagerModal';
 import Sidebar from './components/Sidebar';
+import SnowOverlay from './components/SnowOverlay';
 import { SendIcon, ChatPlusIcon, StopIcon, PanelLeftIcon, ZenavaLogo } from './components/Icons';
 
 const DEFAULT_WELCOME_MESSAGE: Message = {
@@ -35,6 +36,7 @@ const App: React.FC = () => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isSnowing, setIsSnowing] = useState(false);
   
   const [models, setModels] = useState<DifyModelConfig[]>([]);
   const [isModelManagerOpen, setIsModelManagerOpen] = useState(false);
@@ -81,6 +83,10 @@ const App: React.FC = () => {
     if (shouldUseDark) {
         setIsDarkMode(true);
         document.documentElement.classList.add('dark');
+    }
+
+    if (localStorage.getItem('isSnowing') === 'true') {
+      setIsSnowing(true);
     }
     
     inputRef.current?.focus();
@@ -137,6 +143,12 @@ const App: React.FC = () => {
           localStorage.theme = 'dark';
           setIsDarkMode(true);
       }
+  };
+
+  const toggleSnow = () => {
+    const newState = !isSnowing;
+    setIsSnowing(newState);
+    localStorage.setItem('isSnowing', newState.toString());
   };
 
   const handleNewChat = () => {
@@ -223,6 +235,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen font-sans overflow-hidden bg-white dark:bg-zinc-950 transition-all">
+      {isSnowing && <SnowOverlay />}
       <ModelManagerModal 
         isOpen={isModelManagerOpen} onClose={() => setIsModelManagerOpen(false)} models={models} onUpdateModels={setModels} 
         currentModelId={currentModelId} onSelectModel={(id) => setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, modelId: id } : s))}
@@ -234,6 +247,7 @@ const App: React.FC = () => {
         onRenameSession={(id, title) => setSessions(prev => prev.map(s => s.id === id ? { ...s, title } : s))}
         onNewChat={handleNewChat} isOpen={isSidebarOpen} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed}
         onCloseMobile={() => setIsSidebarOpen(false)} isDarkMode={isDarkMode} onToggleTheme={toggleTheme}
+        isSnowing={isSnowing} onToggleSnow={toggleSnow}
       />
 
       <div className="flex-1 flex flex-col h-full relative overflow-hidden">
@@ -256,8 +270,8 @@ const App: React.FC = () => {
             {isHomeView ? (
                 <div className="h-full flex flex-col items-center justify-center max-w-5xl mx-auto px-6 animate-in fade-in duration-700">
                     <div className="mb-8 flex flex-col items-center">
-                        <div className="w-full flex justify-center mb-8">
-                            <ZenavaLogo className="w-64 h-auto" />
+                        <div className="w-full flex justify-center mb-10 overflow-visible">
+                            <ZenavaLogo className="w-72 md:w-80 h-auto" />
                         </div>
                         <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight text-center">
                             {messages[0].text}

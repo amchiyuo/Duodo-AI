@@ -2,9 +2,9 @@
 import React from 'react';
 
 export const ZenavaLogo = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 320 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+  <svg viewBox="0 0 400 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
-      <linearGradient id="zenava-wordmark-gradient" x1="0" y1="40" x2="320" y2="40" gradientUnits="userSpaceOnUse">
+      <linearGradient id="zenava-wordmark-gradient" x1="0" y1="40" x2="400" y2="40" gradientUnits="userSpaceOnUse">
         <stop offset="0%" stopColor="#00E5FF" />
         <stop offset="25%" stopColor="#00B0FF" />
         <stop offset="50%" stopColor="#2979FF" />
@@ -26,7 +26,6 @@ export const ZenavaLogo = ({ className }: { className?: string }) => (
       {/* A */}
       <path d="M340 66L362 10H373L395 66H385L379 51H356L350 66H340ZM359 43H376L367.5 22L359 43Z" />
     </g>
-    {/* Adjusting the viewbox and paths to be more compact and fit "ZENAVA" wordmark style */}
   </svg>
 );
 
@@ -41,6 +40,12 @@ export const ZenavaSmallLogo = ({ className }: { className?: string }) => (
     </defs>
     <rect width="40" height="40" rx="10" fill="url(#zenava-small-gradient)" />
     <path d="M12 12H28L12 28H28" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export const SnowflakeIcon = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /><line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
   </svg>
 );
 
