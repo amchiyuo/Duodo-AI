@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { SavedSystemPrompt } from '../types';
 import { TrashIcon, PlusIcon, ChevronDownIcon, CheckIcon } from './Icons';
@@ -34,9 +35,7 @@ const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
     if (saved) {
       try {
         setPrompts(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse saved prompts");
-      }
+      } catch (e) {}
     }
   }, []);
 

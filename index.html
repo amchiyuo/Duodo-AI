@@ -1,20 +1,25 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gemini Chat Assistant</title>
-    <!-- 保留 Tailwind CDN，虽然生产环境不推荐，但为了样式不崩先留着 -->
+    <title>Zenava AI - 灵动智能，至简致远</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><defs><linearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%22100%22 y2=%22100%22><stop offset=%220%25%22 stop-color=%22%2300E5FF%22/><stop offset=%22100%22 stop-color=%22%23AA00FF%22/></linearGradient></defs><rect width=%22100%22 height=%22100%22 rx=%2225%22 fill=%22url(%23g)%22/><path d=%22M30 30 H70 L30 70 H70%22 stroke=%22white%22 stroke-width=%2210%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 fill=%22none%22/></svg>">
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
       tailwind.config = {
         darkMode: 'class',
         theme: {
           extend: {
+            colors: {
+              zinc: {
+                950: '#09090b',
+              }
+            },
             fontFamily: {
-              sans: ['Inter', 'sans-serif'],
+              sans: ['Inter', 'system-ui', 'sans-serif'],
               mono: ['JetBrains Mono', 'monospace'],
-              display: ['Inter', 'sans-serif'],
             }
           }
         }
@@ -27,33 +32,50 @@
       :root {
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
       }
-      /* Custom scrollbar */
+      
+      body {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* Custom scrollbar - AI Studio style */
       ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
+        width: 5px;
+        height: 5px;
       }
       ::-webkit-scrollbar-track {
         background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #cbd5e1; 
-        border-radius: 3px;
+        background: #e2e8f0;
+        border-radius: 10px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8; 
+        background: #cbd5e1;
       }
       .dark ::-webkit-scrollbar-thumb {
-        background: #3f3f46; 
+        background: #27272a;
       }
       .dark ::-webkit-scrollbar-thumb:hover {
-        background: #52525b; 
+        background: #3f3f46;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
       }
     </style>
-    <!-- 删除了 importmap -->
-    <!-- 删除了可能不存在的 index.css 引用，通常 css 会在 index.tsx 里引入 -->
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/"
+  }
+}
+</script>
 </head>
-  <body class="bg-white text-slate-900 dark:bg-[#09090b] dark:text-zinc-100 transition-colors duration-200 selection:bg-indigo-100 dark:selection:bg-indigo-500/30">
+  <body class="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 transition-colors duration-200 selection:bg-indigo-100 dark:selection:bg-indigo-500/30">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.js"></script>
+  </body>
 </html>

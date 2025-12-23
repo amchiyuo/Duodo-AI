@@ -1,103 +1,121 @@
-import { GoogleGenAI, Content } from "@google/genai";
-import { Message, Role } from "../types";
 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+import { DifyModelConfig } from "../types";
 
-if (!apiKey) {
-  console.error("API_KEY is missing from environment variables.");
-}
+// 硬编码 API Key
+const DIFY_API_KEY = "app-j7S5ZdVDtDlmPI1sfIdErmo9";
 
-const ai = new GoogleGenAI({ apiKey: apiKey || '' });
-
-// Helper to prepare history
-const prepareHistory = (history: Message[]): Content[] => {
-    return history.map((msg) => ({
-        role: msg.role === Role.USER ? 'user' : 'model',
-        parts: [{ text: msg.text }],
-    }));
+/**
+ * 深度解析内容，确保返回的一定是字符串
+ */
+const extractContent = (data: any): string => {
+    if (typeof data === 'string') return data;
+    if (Array.isArray(data)) {
+        return data.map(item => extractContent(item)).join("");
+    }
+    if (data && typeof data === 'object') {
+        return data.content || data.answer || data.text || "";
+    }
+    return String(data || "");
 };
 
 /**
- * Streams a message response from the Gemini API.
+ * 发送消息到 Dify API
+ * 关键策略：永远不发送外部 conversation_id，只通过 inputs 传递业务会话 ID
  */
-export async function* streamMessageToGemini(
-  model: string,
-  history: Message[],
-  newMessage: string,
-  systemInstruction?: string
-): AsyncGenerator<string, void, unknown> {
+export const chatWithBot = async (
+  config: DifyModelConfig,
+  query: string,
+  userId: string,
+  innerId?: string
+): Promise<{ text: string; innerId: string }> => {
   try {
-    const historyContent = prepareHistory(history);
+    const payload = {
+      inputs: {
+        access_key_id: config.clinkAk,
+        access_key_secret: config.clinkSk,
+        agent_id: config.agentId,
+        user_id: userId,
+        // 将业务会话 ID 传给工作流变量，这是维持上下文的唯一钥匙
+        conversation_id: innerId || ""
+      },
+      query: query,
+      response_mode: "blocking",
+      // 关键修正：永远传空字符串。
+      // 如果传了旧的外部 ID， Dify 可能会锁定 inputs 导致内部 ID 无法生效。
+      conversation_id: "", 
+      user: userId,
+      files: []
+    };
 
-    const chat = ai.chats.create({
-      model: model,
-      history: historyContent,
-      config: {
-        systemInstruction: systemInstruction,
-      }
+    const response = await fetch("https://ai-agent.tinetcloud.com/v1/chat-messages", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${DIFY_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
     });
 
-    const result = await chat.sendMessageStream({
-      message: newMessage
-    });
-
-    for await (const chunk of result) {
-      const chunkText = chunk.text;
-      if (chunkText) {
-        yield chunkText;
-      }
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`API 错误: ${response.status} ${errorData.message || response.statusText}`);
     }
-  } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    throw new Error(error.message || "Failed to generate response");
-  }
-}
 
-/**
- * Generates a short title for the chat based on the first user message.
- * Uses 'gemini-2.5-flash' for speed and efficiency.
- */
-export const generateChatTitle = async (
-    firstMessage: string
-): Promise<string> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: `Summarize the following user request into a very short, concise title (max 5 words) in the same language as the request. Do not add quotes or periods. Request: "${firstMessage}"`,
-        });
-        return response.text?.trim() || 'New Chat';
-    } catch (error) {
-        console.error("Failed to generate title:", error);
-        return 'New Chat';
+    const data = await response.json();
+
+    let textResponse = "";
+    let extractedInnerId = "";
+
+    // 从 answer 字段中解析 JSON，获取业务正文和业务会话 ID
+    if (data.answer !== undefined && data.answer !== null) {
+        if (typeof data.answer === 'string') {
+            const trimmed = data.answer.trim();
+            // 尝试解析 JSON
+            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    
+                    // 1. 提取内部业务 ID (通常在解析后的 JSON 根部)
+                    if (parsed.conversation_id) {
+                        extractedInnerId = parsed.conversation_id;
+                    }
+
+                    // 2. 提取文本内容 (根据日志，可能是 parsed.answer 数组)
+                    if (parsed.answer && Array.isArray(parsed.answer)) {
+                        textResponse = parsed.answer.map((item: any) => item.content || "").join("");
+                    } else {
+                        textResponse = extractContent(parsed);
+                    }
+                } catch (e) {
+                    textResponse = trimmed;
+                }
+            } else {
+                textResponse = trimmed;
+            }
+        } else {
+            textResponse = extractContent(data.answer);
+            if (data.answer.conversation_id) extractedInnerId = data.answer.conversation_id;
+        }
     }
-}
 
-/**
- * Standard non-streaming send (fallback if needed)
- */
-export const sendMessageToGemini = async (
-  model: string,
-  history: Message[],
-  newMessage: string,
-  systemInstruction?: string
-): Promise<string> => {
-  try {
-    const historyContent = prepareHistory(history);
-    const chat = ai.chats.create({
-      model: model,
-      history: historyContent,
-      config: {
-        systemInstruction: systemInstruction,
-      }
-    });
+    // 兜底文本
+    if (!textResponse && data.metadata?.message) textResponse = String(data.metadata.message);
+    if (!textResponse && data.message) textResponse = String(data.message);
+    
+    // 如果内部没返回 ID，则维持当前的 ID
+    const finalInnerId = extractedInnerId || innerId || "";
 
-    const response = await chat.sendMessage({
-      message: newMessage
-    });
+    return {
+      text: textResponse || "智能体未返回有效内容。",
+      innerId: finalInnerId
+    };
 
-    return response.text || "No response text received.";
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    throw new Error(error.message || "Failed to generate response");
+    throw error;
   }
 };
+
+export const generateChatTitle = async (firstMessage: string): Promise<string> => {
+    const clean = firstMessage.trim().replace(/\n/g, ' ');
+    return Promise.resolve(clean.slice(0, 15) + (clean.length > 15 ? '...' : ''));
+}

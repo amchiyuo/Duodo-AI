@@ -1,103 +1,127 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Role, Message, ChatSession } from './types';
-import { DEFAULT_MODEL } from './constants';
-import { streamMessageToGemini, generateChatTitle } from './services/geminiService';
+import { Role, Message, ChatSession, DifyModelConfig } from './types';
+import { STORAGE_KEY_SESSIONS, STORAGE_KEY_MODELS, STORAGE_KEY_USER_ID } from './constants';
+import { chatWithBot, generateChatTitle } from './services/geminiService';
 import ChatMessage from './components/ChatMessage';
 import ModelSelector from './components/ModelSelector';
-import SystemPromptModal from './components/SystemPromptModal';
+import ModelManagerModal from './components/ModelManagerModal';
 import Sidebar from './components/Sidebar';
-import { SendIcon, ChatPlusIcon, TuneIcon, MenuIcon, StopIcon } from './components/Icons';
+import { SendIcon, ChatPlusIcon, StopIcon, PanelLeftIcon, ZenavaLogo } from './components/Icons';
 
-// --- Constants ---
-const STORAGE_KEY = 'gemini_chat_sessions_v1';
 const DEFAULT_WELCOME_MESSAGE: Message = {
     id: 'welcome-default',
     role: Role.MODEL,
-    text: "你好！我是 Duodo AI。我可以帮你写代码、分析数据，或者一起探索创意。",
+    text: "您今天在想什么？", 
     timestamp: Date.now(),
-    excludeFromHistory: true // Mark as system message
+    excludeFromHistory: true
 };
 
-const createNewSession = (model: string): ChatSession => ({
+const createNewSession = (modelId: string): ChatSession => ({
     id: Date.now().toString(),
     title: '新对话',
     messages: [ { ...DEFAULT_WELCOME_MESSAGE, id: `welcome-${Date.now()}` } ],
     createdAt: Date.now(),
-    model: model
+    modelId: modelId,
+    difyConversationId: '',
+    innerConversationId: '' 
 });
 
 const App: React.FC = () => {
-  // --- State ---
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
+  const [isCollapsed, setIsCollapsed] = useState(false); 
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   
-  // System Instruction State
-  const [systemInstruction, setSystemInstruction] = useState('');
-  const [isSystemModalOpen, setIsSystemModalOpen] = useState(false);
-  
+  const [models, setModels] = useState<DifyModelConfig[]>([]);
+  const [isModelManagerOpen, setIsModelManagerOpen] = useState(false);
+  const [userId, setUserId] = useState<string>('');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const abortControllerRef = useRef<boolean>(false); // Simple ref for cancellation loop
 
-  // --- Derived State ---
   const currentSession = sessions.find(s => s.id === currentSessionId);
   const messages = currentSession?.messages || [];
-  const currentModel = currentSession?.model || DEFAULT_MODEL;
+  const currentModelId = currentSession?.modelId || '';
 
-  // --- Initialization & Persistence ---
+  const isHomeView = messages.length === 1 && messages[0].excludeFromHistory;
+
   useEffect(() => {
-    // Session Load
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-        try {
-            const parsedSessions = JSON.parse(saved);
-            if (Array.isArray(parsedSessions) && parsedSessions.length > 0) {
-                setSessions(parsedSessions);
-                setCurrentSessionId(parsedSessions[0].id);
-            } else {
-                const newSession = createNewSession(DEFAULT_MODEL);
-                setSessions([newSession]);
-                setCurrentSessionId(newSession.id);
-            }
-        } catch (e) {
-            console.error("Failed to parse sessions", e);
-            const newSession = createNewSession(DEFAULT_MODEL);
-            setSessions([newSession]);
-            setCurrentSessionId(newSession.id);
-        }
-    } else {
-        const newSession = createNewSession(DEFAULT_MODEL);
-        setSessions([newSession]);
-        setCurrentSessionId(newSession.id);
+    let storedUserId = localStorage.getItem(STORAGE_KEY_USER_ID);
+    if (!storedUserId) {
+        storedUserId = `user_zenava_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem(STORAGE_KEY_USER_ID, storedUserId);
+    }
+    setUserId(storedUserId);
+
+    const savedModels = localStorage.getItem(STORAGE_KEY_MODELS);
+    if (savedModels) {
+        try { setModels(JSON.parse(savedModels)); } catch (e) {}
     }
 
-    // Theme Load
+    const savedSessions = localStorage.getItem(STORAGE_KEY_SESSIONS);
+    let loadedSessions: ChatSession[] = [];
+    if (savedSessions) {
+        try { loadedSessions = JSON.parse(savedSessions); } catch (e) {}
+    }
+
+    if (loadedSessions.length > 0) {
+        setSessions(loadedSessions);
+        setCurrentSessionId(loadedSessions[0].id);
+    } else {
+        const initialSession = createNewSession('');
+        setSessions([initialSession]);
+        setCurrentSessionId(initialSession.id);
+    }
+
     const shouldUseDark = localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    
     if (shouldUseDark) {
         setIsDarkMode(true);
         document.documentElement.classList.add('dark');
-    } else {
-        setIsDarkMode(false);
-        document.documentElement.classList.remove('dark');
     }
-
+    
+    inputRef.current?.focus();
   }, []);
 
   useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key === 'n') {
+        e.preventDefault();
+        handleNewChat();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '\\' || e.key === 'b')) {
+        e.preventDefault();
+        setIsCollapsed(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [currentModelId, models, sessions]);
+
+  useEffect(() => {
+    if (!isHomeView) {
+        scrollToBottom();
+    }
+  }, [messages, isLoading, isHomeView]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [isLoading]);
+
+  useEffect(() => {
       if (sessions.length > 0) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+          localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
       }
   }, [sessions]);
 
-  // Auto-scroll
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isLoading, currentSessionId]);
+      localStorage.setItem(STORAGE_KEY_MODELS, JSON.stringify(models));
+  }, [models]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -115,321 +139,188 @@ const App: React.FC = () => {
       }
   };
 
-  // --- Handlers ---
-
   const handleNewChat = () => {
-      const newSession = createNewSession(DEFAULT_MODEL);
+      const defaultModelId = currentModelId || (models.length > 0 ? models[0].id : '');
+      const newSession = createNewSession(defaultModelId);
       setSessions(prev => [newSession, ...prev]);
       setCurrentSessionId(newSession.id);
-      setSystemInstruction(''); // Reset system instruction for new chat
       setIsSidebarOpen(false);
-      setTimeout(() => inputRef.current?.focus(), 100);
-  };
-
-  const handleDeleteSession = (e: React.MouseEvent, sessionId: string) => {
-      // Logic handled in Sidebar, but we update state here
-      const newSessions = sessions.filter(s => s.id !== sessionId);
-      setSessions(newSessions);
-      
-      if (newSessions.length === 0) {
-          const fresh = createNewSession(DEFAULT_MODEL);
-          setSessions([fresh]);
-          setCurrentSessionId(fresh.id);
-      } else if (sessionId === currentSessionId) {
-          setCurrentSessionId(newSessions[0].id);
-      }
-  };
-
-  const handleRenameSession = (sessionId: string, newTitle: string) => {
-      setSessions(prev => prev.map(s => 
-        s.id === sessionId ? { ...s, title: newTitle } : s
-      ));
-  };
-
-  const handleModelChange = (newModel: string) => {
-      setSessions(prev => prev.map(s => 
-        s.id === currentSessionId ? { ...s, model: newModel } : s
-      ));
-  };
-
-  const updateCurrentSessionMessages = (updateFn: (msgs: Message[]) => Message[]) => {
-      setSessions(prev => prev.map(s => {
-          if (s.id === currentSessionId) {
-              return { ...s, messages: updateFn(s.messages) };
-          }
-          return s;
-      }));
-  };
-
-  const handleStopGeneration = () => {
-      abortControllerRef.current = true;
-      setIsLoading(false);
+      setTimeout(() => inputRef.current?.focus(), 50);
   };
 
   const handleSendMessage = async (overrideText?: string) => {
     const textToSend = overrideText || inputValue.trim();
     if (!textToSend || (isLoading && !overrideText)) return;
+    
+    const activeModelConfig = models.find(m => m.id === currentModelId);
+    if (!activeModelConfig) {
+        setIsModelManagerOpen(true);
+        return;
+    }
+
+    const targetSessionId = currentSessionId;
+    const curInnerId = sessions.find(s => s.id === targetSessionId)?.innerConversationId || "";
 
     if (!overrideText) {
         setInputValue('');
         if (inputRef.current) inputRef.current.style.height = 'auto';
     }
 
-    // If we are overriding (regenerating), we assume the history has already been cleaned
-    // If regular send, append user message
-    if (!overrideText) {
-        const newUserMessage: Message = {
-            id: Date.now().toString(),
-            role: Role.USER,
-            text: textToSend,
-            timestamp: Date.now()
-        };
-        updateCurrentSessionMessages(prev => [...prev, newUserMessage]);
-        
-        // --- Intelligent Title Generation (Flash) ---
-        // Trigger if this is the first *user* message in the session
-        const isFirstUserMessage = messages.filter(m => m.role === Role.USER).length === 0;
-        if (isFirstUserMessage) {
-            generateChatTitle(textToSend).then(title => {
-                setSessions(prev => prev.map(s => 
-                    s.id === currentSessionId ? { ...s, title: title } : s
-                ));
-            });
+    const isFirstRealMessage = isHomeView;
+
+    const newUserMessage: Message = {
+        id: Date.now().toString(),
+        role: Role.USER,
+        text: textToSend,
+        timestamp: Date.now()
+    };
+    
+    setSessions(prev => prev.map(s => {
+        if (s.id === targetSessionId) {
+            const filteredMessages = isFirstRealMessage ? [] : s.messages;
+            return { ...s, messages: [...filteredMessages, newUserMessage] };
         }
+        return s;
+    }));
+    
+    if (isFirstRealMessage) {
+        generateChatTitle(textToSend).then(title => {
+            setSessions(prev => prev.map(s => s.id === targetSessionId ? { ...s, title: title } : s));
+        });
     }
 
     setIsLoading(true);
-    abortControllerRef.current = false;
-
     const botMessageId = (Date.now() + 1).toString();
     const newBotMessage: Message = {
-      id: botMessageId,
-      role: Role.MODEL,
-      text: "",
-      timestamp: Date.now(),
-      startTime: Date.now(),
-      isStreaming: true
+      id: botMessageId, role: Role.MODEL, text: "", timestamp: Date.now(), startTime: Date.now(), isStreaming: true
     };
     
-    updateCurrentSessionMessages(prev => [...prev, newBotMessage]);
+    setSessions(prev => prev.map(s => s.id === targetSessionId ? { ...s, messages: [...s.messages, newBotMessage] } : s));
 
     try {
-      // Re-fetch fresh state to get history, but excluding the bot message we just added
-      // We rely on 'sessions' state ref updating in the next render cycle, but inside async, 
-      // we need to be careful. Ideally we pass history to the function.
-      // For now, let's grab the latest from the session find, bearing in mind the update above might not be flushed yet in 'messages'.
-      // Better way: calculate history here.
-      
-      const currentMsgs = sessions.find(s => s.id === currentSessionId)?.messages || [];
-      const historyForStream = overrideText 
-            ? currentMsgs // If regenerating, currentMsgs already has the user message (cleaned)
-            : [...currentMsgs, { id: Date.now().toString(), role: Role.USER, text: textToSend, timestamp: Date.now() }]; // Approximate for now, relying on stream service to handle it cleanly? 
-            // Actually, best to wait for state update or use local variable.
-            // Let's rely on the fact that `updateCurrentSessionMessages` runs.
-      
-      // Filter out error messages and system messages, and crucially, the empty bot message we just added
-      const validHistory = (overrideText ? currentMsgs : [...currentMsgs, { role: Role.USER, text: textToSend } as Message])
-        .filter(m => !m.isError && !m.excludeFromHistory && m.id !== botMessageId);
-      
-      let accumulatedText = "";
-      const stream = streamMessageToGemini(currentModel, validHistory, textToSend, systemInstruction);
-
-      for await (const chunk of stream) {
-        if (abortControllerRef.current) {
-            break;
+      const result = await chatWithBot(activeModelConfig, textToSend, userId, curInnerId);
+      setSessions(prev => prev.map(s => {
+        if (s.id === targetSessionId) {
+            return { 
+                ...s, 
+                messages: s.messages.map(msg => msg.id === botMessageId ? { ...msg, text: result.text, isStreaming: false, endTime: Date.now() } : msg),
+                innerConversationId: result.innerId
+            };
         }
-        accumulatedText += chunk;
-        updateCurrentSessionMessages(prev => prev.map(msg => 
-          msg.id === botMessageId ? { ...msg, text: accumulatedText } : msg
-        ));
-      }
-
-      // Success (or stopped)
-      updateCurrentSessionMessages(prev => prev.map(msg => 
-        msg.id === botMessageId ? { ...msg, isStreaming: false, endTime: Date.now() } : msg
-      ));
-
-    } catch (error) {
-      updateCurrentSessionMessages(prev => prev.filter(msg => msg.id !== botMessageId));
-      const errorMessage: Message = {
-        id: (Date.now() + 2).toString(),
-        role: Role.MODEL,
-        text: `Error: ${error instanceof Error ? error.message : '连接失败。'}`,
-        timestamp: Date.now(),
-        isError: true,
-        endTime: Date.now()
-      };
-      updateCurrentSessionMessages(prev => [...prev, errorMessage]);
+        return s;
+      }));
+    } catch (error: any) {
+      setSessions(prev => prev.map(s => {
+          if (s.id === targetSessionId) {
+              return { ...s, messages: [...s.messages.filter(msg => msg.id !== botMessageId), { id: Date.now().toString(), role: Role.MODEL, text: `错误: ${error.message}`, timestamp: Date.now(), isError: true }] };
+          }
+          return s;
+      }));
     } finally {
       setIsLoading(false);
-      abortControllerRef.current = false;
     }
-  };
-
-  const handleRegenerate = (message: Message) => {
-      // Find the index of this bot message
-      const msgIndex = messages.findIndex(m => m.id === message.id);
-      if (msgIndex === -1) return;
-
-      // Find the previous user message
-      const prevUserMsg = messages[msgIndex - 1];
-      if (!prevUserMsg || prevUserMsg.role !== Role.USER) return;
-
-      // Clean history: Remove the bot message and anything after it
-      updateCurrentSessionMessages(prev => prev.slice(0, msgIndex));
-      
-      // Trigger send with the previous user text
-      handleSendMessage(prevUserMsg.text);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  const handleInputResize = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputValue(e.target.value);
-    e.target.style.height = 'auto';
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`; // Increased max height
   };
 
   return (
-    <div className="flex h-screen font-sans overflow-hidden bg-white dark:bg-[#09090b]">
-      <SystemPromptModal 
-        isOpen={isSystemModalOpen}
-        onClose={() => setIsSystemModalOpen(false)}
-        instruction={systemInstruction}
-        onSave={setSystemInstruction}
+    <div className="flex h-screen font-sans overflow-hidden bg-white dark:bg-zinc-950 transition-all">
+      <ModelManagerModal 
+        isOpen={isModelManagerOpen} onClose={() => setIsModelManagerOpen(false)} models={models} onUpdateModels={setModels} 
+        currentModelId={currentModelId} onSelectModel={(id) => setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, modelId: id } : s))}
       />
 
       <Sidebar 
-        sessions={sessions}
-        currentSessionId={currentSessionId}
-        onSelectSession={setCurrentSessionId}
-        onDeleteSession={handleDeleteSession}
-        onRenameSession={handleRenameSession}
-        onNewChat={handleNewChat}
-        isOpen={isSidebarOpen}
-        onCloseMobile={() => setIsSidebarOpen(false)}
-        isDarkMode={isDarkMode}
-        onToggleTheme={toggleTheme}
+        sessions={sessions} currentSessionId={currentSessionId} onSelectSession={setCurrentSessionId}
+        onDeleteSession={(e, id) => { e.stopPropagation(); setSessions(prev => prev.filter(s => s.id !== id)); if (id === currentSessionId && sessions.length > 1) setCurrentSessionId(sessions[0].id); }}
+        onRenameSession={(id, title) => setSessions(prev => prev.map(s => s.id === id ? { ...s, title } : s))}
+        onNewChat={handleNewChat} isOpen={isSidebarOpen} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed}
+        onCloseMobile={() => setIsSidebarOpen(false)} isDarkMode={isDarkMode} onToggleTheme={toggleTheme}
       />
 
-      <div className="flex-1 flex flex-col h-full relative w-full">
-        {/* Compact Header */}
-        <header className="flex-none fixed md:absolute top-0 w-full z-40 backdrop-blur-md bg-white/80 dark:bg-[#09090b]/90 border-b border-slate-100 dark:border-zinc-800/50 transition-all duration-300">
-            <div className="w-full px-4 h-14 flex items-center justify-between">
-                
-                {/* LEFT: Menu (Mobile) & Model Selector (Desktop) */}
-                <div className="flex items-center gap-3">
-                    <button 
-                        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                        className="md:hidden p-2 -ml-2 text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg"
-                    >
-                        <MenuIcon className="w-5 h-5" />
-                    </button>
-                    
-                    {/* Model Selector Moved Here */}
-                    <ModelSelector currentModel={currentModel} onModelChange={handleModelChange} disabled={isLoading} />
-                </div>
-                
-                {/* RIGHT: Actions (System, New Chat) - Removed Logo/Divider */}
-                <div className="flex items-center gap-1 md:gap-3">
-                    
-                    {/* System Prompt */}
-                    <button 
-                        onClick={() => setIsSystemModalOpen(true)} 
-                        className={`p-2 rounded-lg transition-all duration-200 ${systemInstruction ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10' : 'text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800'}`} 
-                        title="系统提示词配置"
-                    >
-                        <TuneIcon className="w-5 h-5" />
-                    </button>
-                    
-                    {/* New Chat Button (Desktop) */}
-                    <button 
-                        onClick={handleNewChat} 
-                        className="hidden md:flex p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
-                        title="新对话"
-                    >
-                        <ChatPlusIcon className="w-5 h-5" />
-                    </button>
-
-                     {/* New Chat Button (Mobile) */}
-                     <button 
-                        onClick={handleNewChat} 
-                        className="md:hidden p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
-                    >
-                        <ChatPlusIcon className="w-5 h-5" />
-                    </button>
-                </div>
+      <div className="flex-1 flex flex-col h-full relative overflow-hidden">
+        <header className={`flex-none h-14 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between px-4 z-30 transition-all ${isHomeView ? 'bg-transparent border-transparent' : 'bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md'}`}>
+            <div className="flex items-center gap-2">
+                <button onClick={() => isCollapsed ? setIsCollapsed(false) : setIsSidebarOpen(true)} className="p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg">
+                  <PanelLeftIcon className="w-5 h-5" />
+                </button>
+                <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 mx-1 hidden md:block"></div>
+                <ModelSelector models={models} currentModelId={currentModelId} onModelChange={(id) => setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, modelId: id } : s))} onManageModels={() => setIsModelManagerOpen(true)} disabled={isLoading} />
+            </div>
+            <div className="flex items-center gap-2">
+                <button onClick={handleNewChat} className="p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg" title="新建对话 (Alt+N)">
+                  <ChatPlusIcon className="w-5 h-5" />
+                </button>
             </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto pt-20 pb-4 px-4 scroll-smooth w-full">
-            <div className="max-w-4xl mx-auto min-h-[calc(100vh-160px)] flex flex-col justify-end">
-                {systemInstruction && messages.length <= 1 && (
-                    <div className="flex justify-center mb-8 animate-in fade-in zoom-in duration-500">
-                        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 rounded-full px-4 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 flex items-center gap-2 shadow-sm">
-                            <TuneIcon className="w-3 h-3" />
-                            <span>系统提示词已启用</span>
+        <main className="flex-1 overflow-y-auto scroll-smooth custom-scrollbar bg-[#fdfdfe] dark:bg-zinc-950">
+            {isHomeView ? (
+                <div className="h-full flex flex-col items-center justify-center max-w-5xl mx-auto px-6 animate-in fade-in duration-700">
+                    <div className="mb-8 flex flex-col items-center">
+                        <div className="w-full flex justify-center mb-8">
+                            <ZenavaLogo className="w-64 h-auto" />
                         </div>
+                        <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight text-center">
+                            {messages[0].text}
+                        </h1>
+                        <p className="mt-3 text-zinc-400 text-sm font-medium tracking-wide uppercase opacity-60">灵动智能，至简致远</p>
                     </div>
-                )}
-                {messages.map((msg, idx) => (
-                    <ChatMessage 
-                        key={msg.id} 
-                        message={msg} 
-                        isLast={idx === messages.length - 1}
-                        onRegenerate={handleRegenerate}
-                    />
-                ))}
-                <div ref={messagesEndRef} className="h-4" />
-            </div>
+                    
+                    {models.length === 0 && (
+                         <button onClick={() => setIsModelManagerOpen(true)} className="mt-4 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-8 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-zinc-500/10 active:scale-95 transition-all">
+                            配置智能体以开始
+                         </button>
+                    )}
+                </div>
+            ) : (
+                <div className="max-w-5xl mx-auto px-6 py-8 md:py-10">
+                    <div className="space-y-6">
+                    {messages.map((msg, idx) => (
+                        <ChatMessage 
+                            key={msg.id} message={msg} isLast={idx === messages.length - 1}
+                            onRegenerate={(m) => {
+                            const idx = messages.findIndex(x => x.id === m.id);
+                            const prevUser = messages[idx-1];
+                            if (prevUser?.role === Role.USER) {
+                                setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, messages: s.messages.slice(0, idx) } : s));
+                                handleSendMessage(prevUser.text);
+                            }
+                            }}
+                        />
+                    ))}
+                    </div>
+                    <div ref={messagesEndRef} className="h-32" />
+                </div>
+            )}
         </main>
 
-        <footer className="flex-none p-4 pb-6 z-20">
-            <div className="max-w-4xl mx-auto">
-                <div className="relative group bg-white dark:bg-[#18181b] rounded-[26px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-black/20 transition-all duration-300 ring-1 ring-slate-200/60 dark:ring-white/5 focus-within:ring-2 focus-within:ring-indigo-500/30 focus-within:shadow-[0_8px_30px_rgb(99,102,241,0.15)]">
+        <footer className={`flex-none pb-6 px-4 md:px-8 bg-gradient-to-t transition-colors ${isHomeView ? 'from-transparent' : 'from-[#fdfdfe] dark:from-zinc-950 via-[#fdfdfe] dark:via-zinc-950 to-transparent'}`}>
+            <div className={`max-w-5xl mx-auto transition-transform duration-500 ${isHomeView ? 'translate-y-[-20vh]' : 'translate-y-0'}`}>
+                <div className="relative group bg-white dark:bg-zinc-900/90 backdrop-blur-sm rounded-[24px] shadow-sm border border-zinc-200 dark:border-zinc-800 focus-within:ring-2 focus-within:ring-zinc-900/5 dark:focus-within:ring-white/5 focus-within:border-zinc-400 dark:focus-within:border-zinc-700 transition-all">
                     <textarea
-                        ref={inputRef}
-                        value={inputValue}
-                        onChange={handleInputResize}
-                        onKeyDown={handleKeyDown}
-                        placeholder="今天想聊点什么？"
-                        rows={1}
-                        className="w-full bg-transparent border-none focus:ring-0 focus:outline-none outline-none text-slate-800 dark:text-zinc-100 resize-none max-h-[200px] py-4 pl-6 pr-14 min-h-[56px] placeholder:text-slate-400 dark:placeholder:text-zinc-500 text-[15px] leading-relaxed"
-                        style={{ overflow: 'hidden' }}
+                        ref={inputRef} value={inputValue} rows={1}
+                        onChange={(e) => { setInputValue(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 400)}px`; }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
+                        placeholder={models.length > 0 ? "在 Zenava 开始探索..." : "请先配置智能体"}
+                        disabled={models.length === 0 || isLoading}
+                        className="w-full bg-transparent border-none focus:ring-0 focus:outline-none outline-none text-zinc-800 dark:text-zinc-100 resize-none py-4 pl-6 pr-14 min-h-[56px] text-[16px] leading-relaxed"
                     />
-                    <div className="absolute right-2 bottom-2">
+                    <div className="absolute right-3 bottom-2.5">
                         {isLoading ? (
-                             <button
-                                onClick={handleStopGeneration}
-                                className="w-10 h-10 rounded-full bg-slate-900 dark:bg-white text-white dark:text-black flex items-center justify-center hover:opacity-80 transition-all active:scale-95"
-                                title="停止生成"
-                             >
-                                <StopIcon className="w-4 h-4" />
-                             </button>
+                             <div className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 flex items-center justify-center animate-pulse"><StopIcon className="w-4 h-4" /></div>
                         ) : (
-                            <button
-                                onClick={() => handleSendMessage()}
-                                disabled={!inputValue.trim()}
-                                className={`w-10 h-10 rounded-full transition-all duration-300 flex items-center justify-center ${!inputValue.trim() ? 'bg-slate-100 dark:bg-[#27272a] text-slate-300 dark:text-zinc-600' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-indigo-500/30 hover:scale-105 active:scale-95'}`}
-                            >
-                                {/* Removed ml-0.5 to fix centering */}
-                                <SendIcon className="w-5 h-5" />
-                            </button>
+                            <button onClick={() => handleSendMessage()} disabled={!inputValue.trim() || models.length === 0} className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${!inputValue.trim() ? 'bg-transparent text-zinc-300' : 'bg-zinc-900 dark:bg-white text-white dark:text-black hover:scale-105 active:scale-95'}`}><SendIcon className="w-4 h-4" /></button>
                         )}
                     </div>
                 </div>
-                <div className="flex justify-between items-center mt-3 px-2">
-                    <p className="text-[10px] font-medium text-slate-400 dark:text-zinc-500 tracking-wide">Duodo AI 可能会生成不准确的信息，请核对重要内容。</p>
-                    <div className="hidden md:flex items-center gap-4 text-[10px] text-slate-400 font-medium">
-                        <span className="flex items-center gap-1"><span className="bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-[9px]">Enter</span> 发送</span>
-                        <span className="flex items-center gap-1"><span className="bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-[9px]">Shift + Enter</span> 换行</span>
+                {!isHomeView && (
+                    <div className="mt-2.5 px-1 flex items-center justify-between text-[11px] text-zinc-400 font-medium">
+                        <div className="flex gap-4">
+                            <span>Alt + N 新对话</span>
+                            <span>Ctrl + B 侧边栏</span>
+                        </div>
+                        <span className="opacity-60">Zenava Intelligence Engine</span>
                     </div>
-                </div>
+                )}
             </div>
         </footer>
       </div>

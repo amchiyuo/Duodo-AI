@@ -1,7 +1,5 @@
-export const DEFAULT_MODEL = "gemini-3-pro-preview";
+export const STORAGE_KEY_SESSIONS = 'duodo_dify_sessions_v1';
+export const STORAGE_KEY_MODELS = 'duodo_dify_models_v1';
+export const STORAGE_KEY_USER_ID = 'duodo_dify_user_id';
 
-export const SUGGESTED_MODELS = [
-  "gemini-3-pro-preview",
-  "gemini-2.0-flash",
-  "gemini-2.5-flash"
-];
+export const DEFAULT_MODEL_CONFIG_ID = "default";

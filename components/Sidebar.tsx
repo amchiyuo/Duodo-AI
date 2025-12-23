@@ -1,6 +1,17 @@
+
 import React, { useState } from 'react';
 import { ChatSession } from '../types';
-import { MessageSquareIcon, TrashIcon, ChatPlusIcon, XIcon, EditIcon, CheckIcon, SearchIcon, DuodoLogo, SunIcon, MoonIcon } from './Icons';
+import { 
+  TrashIcon, 
+  ChatPlusIcon, 
+  XIcon, 
+  EditIcon, 
+  SearchIcon, 
+  ZenavaSmallLogo, 
+  SunIcon, 
+  MoonIcon,
+  PanelLeftIcon
+} from './Icons';
 
 interface SidebarProps {
   sessions: ChatSession[];
@@ -9,7 +20,9 @@ interface SidebarProps {
   onDeleteSession: (e: React.MouseEvent, id: string) => void;
   onRenameSession: (id: string, newTitle: string) => void;
   onNewChat: () => void;
-  isOpen: boolean;
+  isOpen: boolean; // Mobile
+  isCollapsed: boolean; // Desktop
+  setIsCollapsed: (v: boolean) => void;
   onCloseMobile: () => void;
   isDarkMode: boolean;
   onToggleTheme: () => void;
@@ -23,6 +36,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onRenameSession,
   onNewChat,
   isOpen,
+  isCollapsed,
+  setIsCollapsed,
   onCloseMobile,
   isDarkMode,
   onToggleTheme
@@ -46,12 +61,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') {
-          saveEditing(e);
-      }
+      if (e.key === 'Enter') saveEditing(e);
+      if (e.key === 'Escape') setEditingId(null);
   };
 
-  // Filter sessions based on search
   const filteredSessions = sessions.filter(s => 
       s.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -60,70 +73,47 @@ const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Mobile Overlay */}
       {isOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
-          onClick={onCloseMobile}
-        />
+        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm md:hidden" onClick={onCloseMobile} />
       )}
 
       {/* Sidebar Container */}
       <div className={`
-        fixed md:static inset-y-0 left-0 z-50 w-72 bg-slate-50 dark:bg-[#18181b] border-r border-slate-200 dark:border-zinc-800 transition-transform duration-300 ease-in-out transform flex flex-col shadow-xl md:shadow-none
-        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        fixed md:static inset-y-0 left-0 z-[70] bg-zinc-50 dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 transition-all duration-300 ease-in-out flex flex-col overflow-hidden
+        ${isOpen ? 'translate-x-0 w-72' : '-translate-x-full md:translate-x-0'}
+        ${isCollapsed ? 'md:w-0 md:opacity-0 md:border-r-0' : 'md:w-72'}
       `}>
         
-        {/* Header Area */}
-        <div className="flex flex-col gap-4 p-5 pb-2">
-            
-            {/* Logo Area */}
-            <div className="flex items-center justify-between pl-1">
-                <div className="flex items-center gap-2.5">
-                    <DuodoLogo className="w-7 h-7" />
-                    <span className="text-lg font-bold tracking-tight text-slate-800 dark:text-zinc-100 font-display">Duodo AI</span>
+        <div className="flex-none p-4 pb-2">
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                    <ZenavaSmallLogo className="w-6 h-6" />
+                    <span className="text-sm font-bold tracking-widest text-zinc-800 dark:text-zinc-100 uppercase">ZENAVA AI</span>
                 </div>
-                <button 
-                    onClick={onCloseMobile}
-                    className="md:hidden p-2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                >
-                    <XIcon className="w-5 h-5" />
+                <button onClick={onCloseMobile} className="md:hidden p-1.5 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg">
+                    <XIcon className="w-4 h-4" />
                 </button>
             </div>
 
-            {/* New Chat Button */}
-            <button
-                onClick={() => {
-                    onNewChat();
-                    onCloseMobile();
-                }}
-                className="group flex items-center gap-3 w-full bg-white dark:bg-[#27272a] hover:bg-white hover:shadow-md border border-slate-200 dark:border-zinc-700/50 hover:border-indigo-200 dark:hover:border-zinc-600 text-slate-700 dark:text-zinc-200 px-4 py-3 rounded-xl transition-all duration-200 active:scale-[0.98]"
-            >
-                <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-200">
-                    <ChatPlusIcon className="w-4 h-4" />
-                </div>
-                <span className="font-medium text-sm">开启新对话</span>
+            <button onClick={onNewChat} className="flex items-center gap-2.5 w-full bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 px-4 py-2 rounded-xl transition-all text-sm font-medium text-zinc-700 dark:text-zinc-300 shadow-sm">
+                <ChatPlusIcon className="w-4 h-4 text-indigo-500" />
+                <span>新对话</span>
             </button>
+        </div>
 
-            {/* Search Box */}
-            <div className="relative group">
-                <SearchIcon className="absolute left-3 top-2.5 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+        <div className="px-4 py-2">
+            <div className="relative">
+                <SearchIcon className="absolute left-3 top-2.5 w-3.5 h-3.5 text-zinc-400" />
                 <input 
                     type="text"
-                    placeholder="搜索历史记录..."
+                    placeholder="搜索对话..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-transparent border border-transparent hover:border-slate-300 dark:hover:border-zinc-700 focus:bg-white dark:focus:bg-[#09090b] focus:border-indigo-500/30 focus:shadow-sm rounded-lg pl-9 pr-3 py-2 text-xs text-slate-700 dark:text-zinc-300 focus:outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-zinc-600"
+                    className="w-full bg-zinc-200/50 dark:bg-zinc-900 border-none rounded-lg pl-9 pr-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-indigo-500/30 placeholder:text-zinc-400"
                 />
             </div>
         </div>
 
-        {/* History List */}
-        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5 custom-scrollbar">
-          {filteredSessions.length > 0 && (
-             <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest opacity-80">
-                 {searchQuery ? '搜索结果' : '历史记录'}
-             </div>
-          )}
-
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5 custom-scrollbar">
           {filteredSessions.map((session) => (
             <div
               key={session.id}
@@ -134,97 +124,44 @@ const Sidebar: React.FC<SidebarProps> = ({
                 }
               }}
               className={`
-                group/item relative flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200
+                group relative flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all text-xs
                 ${session.id === currentSessionId 
-                  ? 'bg-white dark:bg-[#27272a] text-slate-900 dark:text-zinc-100 font-medium shadow-sm' 
-                  : 'text-slate-600 dark:text-zinc-400 hover:bg-white/60 dark:hover:bg-[#27272a]/50'
+                  ? 'bg-zinc-200 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-medium' 
+                  : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900/50 hover:text-zinc-900 dark:hover:text-zinc-100'
                 }
               `}
             >
-              <MessageSquareIcon className={`w-4 h-4 flex-shrink-0 transition-colors ${session.id === currentSessionId ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-300 dark:text-zinc-600 group-hover/item:text-slate-400'}`} />
-              
-              <div className="flex-1 overflow-hidden min-h-[20px] flex items-center relative">
+              <div className="flex-1 truncate">
                 {editingId === session.id ? (
-                    <div className="flex items-center gap-1 w-full animate-in fade-in duration-200">
-                        <input 
-                            type="text" 
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            onClick={(e) => e.stopPropagation()}
-                            autoFocus
-                            onBlur={() => saveEditing()}
-                            className="w-full text-xs bg-white dark:bg-black border border-indigo-500 rounded px-1 py-0.5 outline-none text-slate-900 dark:text-white"
-                        />
-                    </div>
+                    <input 
+                        type="text" value={editValue} autoFocus
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={handleKeyDown} onBlur={() => saveEditing()}
+                        className="w-full bg-transparent outline-none border-b border-indigo-500 py-0.5"
+                    />
                 ) : (
-                    <div className="flex flex-col w-full pr-8">
-                        <span className="text-xs truncate">{session.title || '新对话'}</span>
-                    </div>
+                    session.title || '未命名对话'
                 )}
               </div>
 
-              {/* Seamless Action Buttons */}
               {editingId !== session.id && (
-                <div className={`
-                    absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 pr-1
-                    opacity-0 group-hover/item:opacity-100 transition-opacity duration-200
-                    ${session.id === currentSessionId 
-                        ? 'bg-white dark:bg-[#27272a]' 
-                        : 'bg-slate-50 dark:bg-[#18181b] group-hover/item:bg-slate-50 dark:group-hover/item:bg-[#18181b]' 
-                    }
-                `}>
-                    <button
-                        onClick={(e) => startEditing(e, session)}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                        title="重命名"
-                    >
-                        <EditIcon className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteSession(e, session.id);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
-                        title="删除对话"
-                    >
-                        <TrashIcon className="w-3.5 h-3.5" />
-                    </button>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={(e) => startEditing(e, session)} className="p-1 text-zinc-400 hover:text-indigo-500"><EditIcon className="w-3 h-3" /></button>
+                    <button onClick={(e) => onDeleteSession(e, session.id)} className="p-1 text-zinc-400 hover:text-red-500"><TrashIcon className="w-3 h-3" /></button>
                 </div>
               )}
             </div>
           ))}
-          
-          {filteredSessions.length === 0 && (
-             <div className="flex flex-col items-center justify-center mt-12 text-slate-400 gap-2">
-                 <SearchIcon className="w-8 h-8 opacity-20" />
-                 <span className="text-xs opacity-60">无相关对话</span>
-             </div>
-          )}
         </div>
 
-        {/* Footer Info & Dark Mode Toggle */}
-        <div className="p-4 border-t border-slate-200 dark:border-zinc-800/50 flex items-center justify-between">
-           <div className="flex items-center gap-3 px-2 py-2 rounded-xl">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-sm ring-2 ring-white dark:ring-[#27272a]">
-                  <span className="font-bold text-[10px]">D</span>
-              </div>
-              <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-slate-700 dark:text-zinc-200">Duodo AI</span>
-                  <span className="text-[10px] text-slate-400">Pro Workspace</span>
-              </div>
-           </div>
-           
-           <button 
-             onClick={onToggleTheme}
-             className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors"
-             title={isDarkMode ? "切换亮色模式" : "切换暗黑模式"}
-           >
+        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950/50">
+           <button onClick={onToggleTheme} className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
              {isDarkMode ? <SunIcon className="w-4 h-4" /> : <MoonIcon className="w-4 h-4" />}
            </button>
+           <div className="flex flex-col items-end">
+             <span className="text-[10px] text-zinc-400 font-mono">ZENAVA V1.2</span>
+           </div>
         </div>
-
       </div>
     </>
   );
